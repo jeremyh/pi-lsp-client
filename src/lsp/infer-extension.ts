@@ -3,7 +3,22 @@ import { extname, join } from "node:path";
 
 import { EXT_TO_LANG } from "./language-mappings.js";
 
-const SKIP_DIRECTORIES = new Set(["node_modules", ".git", "dist", "build", ".next", "out"]);
+// Avoid spending the scan budget on generated, metadata, and dependency trees.
+// This is especially important for Gradle projects: Gradle metadata trees
+// can contain hundreds of files before app/src is reached.
+const SKIP_DIRECTORIES = new Set([
+	"node_modules",
+	".git",
+	".gradle",
+	".idea",
+	".vscode",
+	"dist",
+	"build",
+	"coverage",
+	"target",
+	".next",
+	"out",
+]);
 const MAX_SCAN_ENTRIES = 500;
 
 export function inferExtensionFromDirectory(directory: string): string | null {
