@@ -18,15 +18,24 @@ export function uriToPath(uri: string): string {
 	return fileURLToPath(uri);
 }
 
+/** Format locations from dependencies without crashing on non-file URI schemes. */
+export function uriToDisplayPath(uri: string): string {
+	try {
+		return uriToPath(uri);
+	} catch {
+		return uri;
+	}
+}
+
 export function formatLocation(loc: Location | LocationLink): string {
 	if ("targetUri" in loc) {
-		const uri = uriToPath(loc.targetUri);
+		const uri = uriToDisplayPath(loc.targetUri);
 		const line = loc.targetRange.start.line + 1;
 		const char = loc.targetRange.start.character;
 		return `${uri}:${line}:${char}`;
 	}
 
-	const uri = uriToPath(loc.uri);
+	const uri = uriToDisplayPath(loc.uri);
 	const line = loc.range.start.line + 1;
 	const char = loc.range.start.character;
 	return `${uri}:${line}:${char}`;

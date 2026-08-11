@@ -10,10 +10,23 @@ import {
 	formatSeverity,
 	formatSymbolInfo,
 	formatSymbolKind,
+	uriToDisplayPath,
 	uriToPath,
 } from "../src/lsp/formatters.js";
 
 describe("formatLocation", () => {
+	it("#given a non-file dependency URI #when formatting #then preserves the URI", () => {
+		const loc = {
+			uri: "jar:file:/kotlin-stdlib.jar!/kotlin/Suppress.class",
+			range: {
+				start: { line: 0, character: 0 },
+				end: { line: 0, character: 1 },
+			},
+		};
+
+		expect(formatLocation(loc)).toBe("jar:file:/kotlin-stdlib.jar!/kotlin/Suppress.class:1:0");
+	});
+
 	it("#given a Location #when formatting #then returns file:line:column with 1-based line", () => {
 		// given
 		const loc = {
@@ -213,6 +226,12 @@ describe("formatApplyResult", () => {
 });
 
 describe("uriToPath", () => {
+	it("#given a non-file URI #when converting for display #then returns the original URI", () => {
+		expect(uriToDisplayPath("jar:file:/kotlin-stdlib.jar!/kotlin/0")).toBe(
+			"jar:file:/kotlin-stdlib.jar!/kotlin/0",
+		);
+	});
+
 	it("#given a file URI #when converting #then returns absolute filesystem path", () => {
 		// given / when / then
 		expect(uriToPath("file:///tmp/foo.ts")).toBe("/tmp/foo.ts");

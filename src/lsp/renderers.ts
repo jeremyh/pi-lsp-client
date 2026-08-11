@@ -1,7 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text, truncateToWidth } from "@earendil-works/pi-tui";
 
-import { uriToPath } from "./formatters.js";
+import { uriToDisplayPath } from "./formatters.js";
 import { SYMBOL_KIND_MAP } from "./language-mappings.js";
 import type { LspDiagnosticsDetails } from "./tools/diagnostics.js";
 import type { LspFindReferencesDetails } from "./tools/find-references.js";
@@ -48,9 +48,9 @@ interface DiagnosticsArgs {
 
 function locText(loc: Location | LocationLink): string {
 	if ("targetUri" in loc) {
-		return `${shorten(uriToPath(loc.targetUri), PATH_BUDGET)}:${loc.targetRange.start.line + 1}:${loc.targetRange.start.character}`;
+		return `${shorten(uriToDisplayPath(loc.targetUri), PATH_BUDGET)}:${loc.targetRange.start.line + 1}:${loc.targetRange.start.character}`;
 	}
-	return `${shorten(uriToPath(loc.uri), PATH_BUDGET)}:${loc.range.start.line + 1}:${loc.range.start.character}`;
+	return `${shorten(uriToDisplayPath(loc.uri), PATH_BUDGET)}:${loc.range.start.line + 1}:${loc.range.start.character}`;
 }
 
 function diagSeverityKey(severity?: number): "error" | "warning" | "muted" | "dim" {
@@ -262,7 +262,7 @@ export function renderFindReferencesResult(
 		const head = unique(details.references, (r) => r.uri).slice(0, COLLAPSED_HEAD);
 		const lines: string[] = [summary];
 		for (const ref of head) {
-			lines.push(theme.fg("muted", `  ${shorten(uriToPath(ref.uri), PATH_BUDGET)}`));
+			lines.push(theme.fg("muted", `  ${shorten(uriToDisplayPath(ref.uri), PATH_BUDGET)}`));
 		}
 		if (fileCount > COLLAPSED_HEAD) {
 			lines.push(theme.fg("dim", `  … ${fileCount - COLLAPSED_HEAD} more files`));
