@@ -311,6 +311,8 @@ function runWarmup(id: string, ctx: ExtensionContext): void {
 			priority: 0,
 			...(def.env !== undefined ? { env: def.env } : {}),
 			...(def.initialization !== undefined ? { initialization: def.initialization } : {}),
+			...(def.requestTimeoutMs !== undefined ? { requestTimeoutMs: def.requestTimeoutMs } : {}),
+			...(def.initializationTimeoutMs !== undefined ? { initializationTimeoutMs: def.initializationTimeoutMs } : {}),
 		});
 		ctx.ui.notify(`Warming up '${id}' in background`, "info");
 	} catch (err) {

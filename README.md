@@ -164,7 +164,9 @@ Add custom servers by creating either:
       "command": ["my-lsp", "--stdio"],
       "extensions": [".myext"],
       "priority": 100,
-      "env": { "MY_LSP_LOG": "1" }
+      "env": { "MY_LSP_LOG": "1" },
+      "requestTimeoutMs": 60000,
+      "initializationTimeoutMs": 180000
     },
     "biome": {
       "disabled": true
@@ -182,7 +184,8 @@ Add custom servers by creating either:
 - **Lazy spawn.** Servers spawn on first tool call for a matching extension. No eager warmup of the entire registry.
 - **Refcount.** Each `withLspClient(...)` call increments refCount on entry and decrements in `finally`. Idle reaping fires only when refCount hits zero AND lastUsedAt is older than the idle timeout.
 - **Idle timeout: 5 minutes.** Idle clients are stopped and removed from the pool.
-- **Init timeout: 60 seconds.** A pending init older than 60s is reaped, even if other callers are waiting on it.
+- **Init timeout: 60 seconds by default.** A pending init older than the configured timeout is reaped, even if other callers are waiting on it. Servers can override this with `initializationTimeoutMs` in `.pi/lsp-client.json`; slow built-in servers may provide a larger timeout.
+- **Request timeout: 15 seconds by default.** Servers can override this with `requestTimeoutMs` when indexing or analysis is expected to take longer.
 - **Abort-aware acquisition.** `getClient(root, server, signal?)` participates in tool cancellation. If the signal aborts before init resolves, the caller is removed from the waiter list; if no callers remain, the initializing client is stopped and removed.
 - **Crash retry.** When the JSON-RPC transport throws `LspConnectionClosedError` or `LspProcessExitedError` mid-call, the wrapper evicts the dead client and retries exactly once for idempotent read tools (`diagnostics`, `goto_definition`, `find_references`, `symbols`, `prepare_rename`). Mutating tools (`rename`) are never retried.
 - **Tool filtering.** `disabledTools` is evaluated when the extension loads. Disabled tools are not exposed to the model, though internal post-edit diagnostics still use `lsp_diagnostics` directly.

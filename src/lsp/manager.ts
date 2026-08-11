@@ -10,6 +10,7 @@ interface ManagedClient {
 	initPromise: Promise<void> | null;
 	isInitializing: boolean;
 	initializingSince: number | null;
+	initTimeoutMs: number;
 }
 
 export interface ClientSnapshot {
@@ -74,6 +75,10 @@ export class LspManager {
 	private readonly clientFactory: (root: string, server: ResolvedServer) => LspClient;
 	private readonly now: () => number;
 
+	private initTimeoutFor(server: ResolvedServer): number {
+		return server.initializationTimeoutMs ?? this.initTimeoutMs;
+	}
+
 	constructor(options: LspManagerOptions = {}) {
 		this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS;
 		this.initTimeoutMs = options.initTimeoutMs ?? INIT_TIMEOUT_MS;
@@ -120,7 +125,7 @@ export class LspManager {
 			if (
 				managed.isInitializing &&
 				managed.initializingSince !== null &&
-				t - managed.initializingSince > this.initTimeoutMs
+				t - managed.initializingSince > managed.initTimeoutMs
 			) {
 				managed.client.stop().catch(() => {});
 				this.clients.delete(key);
@@ -165,7 +170,7 @@ export class LspManager {
 			if (
 				managed.isInitializing &&
 				managed.initializingSince !== null &&
-				t - managed.initializingSince > this.initTimeoutMs
+				t - managed.initializingSince > managed.initTimeoutMs
 			) {
 				await managed.client.stop().catch(() => {});
 				this.clients.delete(key);
@@ -217,6 +222,7 @@ export class LspManager {
 			initPromise,
 			isInitializing: true,
 			initializingSince: initStartedAt,
+			initTimeoutMs: this.initTimeoutFor(server),
 		};
 		this.clients.set(key, newManaged);
 
@@ -284,6 +290,7 @@ export class LspManager {
 			initPromise,
 			isInitializing: true,
 			initializingSince: initStartedAt,
+			initTimeoutMs: this.initTimeoutFor(server),
 		};
 		this.clients.set(key, managed);
 

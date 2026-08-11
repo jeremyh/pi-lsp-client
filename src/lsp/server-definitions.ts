@@ -136,7 +136,13 @@ export const BUILTIN_SERVERS: Record<string, Omit<LspServerConfig, "id">> = {
 		command: ["haskell-language-server-wrapper", "--lsp"],
 		extensions: [".hs", ".lhs"],
 	},
-	"kotlin-ls": { command: ["kotlin-lsp"], extensions: [".kt", ".kts"] },
+	"kotlin-ls": {
+		command: ["kotlin-lsp"],
+		extensions: [".kt", ".kts"],
+		// Kotlin indexing can take several minutes on a cold Android workspace.
+		requestTimeoutMs: 120_000,
+		initializationTimeoutMs: 180_000,
+	},
 };
 
 export const AUTO_INSTALLABLE_SERVERS: Record<string, string[]> = {

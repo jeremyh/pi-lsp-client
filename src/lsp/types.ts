@@ -5,6 +5,10 @@ export interface LspServerConfig {
 	disabled?: boolean;
 	env?: Record<string, string>;
 	initialization?: Record<string, unknown>;
+	/** Maximum time to wait for any one JSON-RPC request. */
+	requestTimeoutMs?: number;
+	/** Maximum time to allow the server to start and answer initialize. */
+	initializationTimeoutMs?: number;
 }
 
 export interface ResolvedServer {
@@ -14,6 +18,10 @@ export interface ResolvedServer {
 	priority: number;
 	env?: Record<string, string>;
 	initialization?: Record<string, unknown>;
+	/** Maximum time to wait for any one JSON-RPC request. */
+	requestTimeoutMs?: number;
+	/** Maximum time to allow the server to start and answer initialize. */
+	initializationTimeoutMs?: number;
 }
 
 export interface ServerLookupInfo {

@@ -12,6 +12,8 @@ interface LspEntry {
 	priority?: number;
 	env?: Record<string, string>;
 	initialization?: Record<string, unknown>;
+	requestTimeoutMs?: number;
+	initializationTimeoutMs?: number;
 }
 
 interface ConfigJson {
@@ -84,6 +86,10 @@ export function getMergedServers(): ServerWithSource[] {
 				priority: entry.priority ?? 0,
 				...(entry.env !== undefined ? { env: entry.env } : {}),
 				...(entry.initialization !== undefined ? { initialization: entry.initialization } : {}),
+				...(entry.requestTimeoutMs !== undefined ? { requestTimeoutMs: entry.requestTimeoutMs } : {}),
+				...(entry.initializationTimeoutMs !== undefined
+					? { initializationTimeoutMs: entry.initializationTimeoutMs }
+					: {}),
 				source,
 			});
 			seen.add(id);

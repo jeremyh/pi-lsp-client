@@ -179,11 +179,12 @@ export class LspClientTransport {
 		}
 
 		let timeoutHandle: NodeJS.Timeout | null = null;
+		const requestTimeoutMs = this.server.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
 		const timeoutPromise = new Promise<never>((_, reject) => {
 			timeoutHandle = setTimeout(() => {
 				const stderrTail = this.stderrBuffer.slice(-5).join("\n");
 				reject(new LspRequestTimeoutError(method, stderrTail || undefined));
-			}, REQUEST_TIMEOUT_MS);
+			}, requestTimeoutMs);
 		});
 
 		try {
