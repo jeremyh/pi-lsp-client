@@ -16,6 +16,8 @@ interface LspEntry {
 
 interface ConfigJson {
 	lsp?: Record<string, LspEntry>;
+	/** Tool names omitted from pi's tool registry for this configuration. */
+	disabledTools?: string[];
 }
 
 type ConfigSource = "project" | "user";
@@ -111,6 +113,14 @@ export function getMergedServers(): ServerWithSource[] {
 		}
 		return b.priority - a.priority;
 	});
+}
+
+export function getDisabledToolNames(): Set<string> {
+	const disabled = new Set<string>();
+	for (const config of loadAllConfigs().values()) {
+		for (const name of config.disabledTools ?? []) disabled.add(name);
+	}
+	return disabled;
 }
 
 export function getDisabledServerIds(): Set<string> {

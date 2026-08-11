@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ExtensionAPI, ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 
+import { getDisabledToolNames } from "./lsp/config-loader.js";
 import { LspInspectorComponent } from "./lsp/inspector.js";
 import { disposeDefaultLspManager, getLspManager } from "./lsp/manager.js";
 import {
@@ -63,7 +64,7 @@ export interface PostEditToolResultRegistrar {
  * typed crash retry for read tools, and a `/lsp` inspector backed by an
  * explicit getSnapshot() API.
  *
- * Tools registered:
+ * Tools registered (unless disabledTools is set in lsp-client.json):
  *   - lsp_diagnostics      — errors/warnings/info from language servers
  *   - lsp_goto_definition  — jump to symbol definition
  *   - lsp_find_references  — all usages of a symbol across the workspace
@@ -81,48 +82,62 @@ export interface PostEditToolResultRegistrar {
  */
 export default function (pi: ExtensionAPI): void {
 	const manager = getLspManager();
+	const disabledTools = getDisabledToolNames();
+	const isEnabled = (name: string): boolean => !disabledTools.has(name);
 
-	pi.registerTool({
-		...lsp_diagnostics,
-		renderCall: (args, theme) => renderDiagnosticsCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderDiagnosticsResult(result as ResultLike<LspDiagnosticsDetails>, options, theme),
-	});
+	if (isEnabled("lsp_diagnostics")) {
+		pi.registerTool({
+			...lsp_diagnostics,
+			renderCall: (args, theme) => renderDiagnosticsCall(args as never, theme),
+			renderResult: (result, options, theme) =>
+				renderDiagnosticsResult(result as ResultLike<LspDiagnosticsDetails>, options, theme),
+		});
+	}
 
-	pi.registerTool({
-		...lsp_goto_definition,
-		renderCall: (args, theme) => renderGotoDefinitionCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderGotoDefinitionResult(result as ResultLike<LspGotoDefinitionDetails>, options, theme),
-	});
+	if (isEnabled("lsp_goto_definition")) {
+		pi.registerTool({
+			...lsp_goto_definition,
+			renderCall: (args, theme) => renderGotoDefinitionCall(args as never, theme),
+			renderResult: (result, options, theme) =>
+				renderGotoDefinitionResult(result as ResultLike<LspGotoDefinitionDetails>, options, theme),
+		});
+	}
 
-	pi.registerTool({
-		...lsp_find_references,
-		renderCall: (args, theme) => renderFindReferencesCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderFindReferencesResult(result as ResultLike<LspFindReferencesDetails>, options, theme),
-	});
+	if (isEnabled("lsp_find_references")) {
+		pi.registerTool({
+			...lsp_find_references,
+			renderCall: (args, theme) => renderFindReferencesCall(args as never, theme),
+			renderResult: (result, options, theme) =>
+				renderFindReferencesResult(result as ResultLike<LspFindReferencesDetails>, options, theme),
+		});
+	}
 
-	pi.registerTool({
-		...lsp_symbols,
-		renderCall: (args, theme) => renderSymbolsCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderSymbolsResult(result as ResultLike<LspSymbolsDetails>, options, theme),
-	});
+	if (isEnabled("lsp_symbols")) {
+		pi.registerTool({
+			...lsp_symbols,
+			renderCall: (args, theme) => renderSymbolsCall(args as never, theme),
+			renderResult: (result, options, theme) =>
+				renderSymbolsResult(result as ResultLike<LspSymbolsDetails>, options, theme),
+		});
+	}
 
-	pi.registerTool({
-		...lsp_prepare_rename,
-		renderCall: (args, theme) => renderPrepareRenameCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderPrepareRenameResult(result as ResultLike<LspPrepareRenameDetails>, options, theme),
-	});
+	if (isEnabled("lsp_prepare_rename")) {
+		pi.registerTool({
+			...lsp_prepare_rename,
+			renderCall: (args, theme) => renderPrepareRenameCall(args as never, theme),
+			renderResult: (result, options, theme) =>
+				renderPrepareRenameResult(result as ResultLike<LspPrepareRenameDetails>, options, theme),
+		});
+	}
 
-	pi.registerTool({
-		...lsp_rename,
-		renderCall: (args, theme) => renderRenameCall(args as never, theme),
-		renderResult: (result, options, theme) =>
-			renderRenameResult(result as ResultLike<LspRenameDetails>, options, theme),
-	});
+	if (isEnabled("lsp_rename")) {
+		pi.registerTool({
+			...lsp_rename,
+			renderCall: (args, theme) => renderRenameCall(args as never, theme),
+			renderResult: (result, options, theme) =>
+				renderRenameResult(result as ResultLike<LspRenameDetails>, options, theme),
+		});
+	}
 
 	const updateStatus = (ctx: ExtensionContext): void => {
 		const snapshots = manager.getSnapshot();

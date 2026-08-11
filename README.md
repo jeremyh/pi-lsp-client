@@ -55,7 +55,7 @@ cd ~/.pi/agent/extensions/pi-lsp-client && npm install
 pi -e /path/to/pi-lsp-client/src/index.ts
 ```
 
-After installation, restart pi (or run `/reload` inside an interactive session). All six tools register automatically and become callable by the LLM.
+After installation, restart pi (or run `/reload` inside an interactive session). The core tools register automatically. Optional tools can be omitted from pi's tool registry with `disabledTools` in `lsp-client.json`.
 
 ## Tools
 
@@ -158,6 +158,7 @@ Add custom servers by creating either:
 
 ```jsonc
 {
+  "disabledTools": ["lsp_prepare_rename"],
   "lsp": {
     "my-server": {
       "command": ["my-lsp", "--stdio"],
@@ -172,6 +173,8 @@ Add custom servers by creating either:
 }
 ```
 
+`disabledTools` is merged from project and user configuration and removes those tools from pi's registry entirely. This is useful when a language server advertises a broken or unhelpful operation. Tool names are `lsp_diagnostics`, `lsp_goto_definition`, `lsp_find_references`, `lsp_symbols`, `lsp_prepare_rename`, and `lsp_rename`. The setting is configuration-wide rather than server-specific because pi's tool registry is global for a session; use a project-local config when the policy should apply only to one repository.
+
 `disabled: true` removes a builtin server from resolution. Project config wins over user config. Builtins are the lowest priority (only used when no project/user override exists).
 
 ## Lifecycle
@@ -182,6 +185,7 @@ Add custom servers by creating either:
 - **Init timeout: 60 seconds.** A pending init older than 60s is reaped, even if other callers are waiting on it.
 - **Abort-aware acquisition.** `getClient(root, server, signal?)` participates in tool cancellation. If the signal aborts before init resolves, the caller is removed from the waiter list; if no callers remain, the initializing client is stopped and removed.
 - **Crash retry.** When the JSON-RPC transport throws `LspConnectionClosedError` or `LspProcessExitedError` mid-call, the wrapper evicts the dead client and retries exactly once for idempotent read tools (`diagnostics`, `goto_definition`, `find_references`, `symbols`, `prepare_rename`). Mutating tools (`rename`) are never retried.
+- **Tool filtering.** `disabledTools` is evaluated when the extension loads. Disabled tools are not exposed to the model, though internal post-edit diagnostics still use `lsp_diagnostics` directly.
 - **Session shutdown is the primary cleanup boundary.** `pi.on("session_shutdown", ...)` calls `disposeDefaultLspManager()` (stops all clients, clears the reaper interval, unregisters the process exit fallback) and clears `pi-lsp` status/widget keys.
 - **No raw signal handlers.** No `SIGINT`/`SIGTERM` listeners — those would fight pi's TUI shutdown. Just `process.once("exit", ...)` as a sync fallback for unexpected exits, and the disposer is called from `session_shutdown` so the listener count never grows across `/reload`.
 
