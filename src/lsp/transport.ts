@@ -1,4 +1,5 @@
 import { delimiter } from "node:path";
+import { PassThrough } from "node:stream";
 import {
 	createMessageConnection,
 	type MessageConnection,
@@ -15,14 +16,22 @@ import type { Diagnostic, ResolvedServer } from "./types.js";
 export class LspClientTransport {
 	protected proc: SpawnedProcess | null = null;
 	protected connection: MessageConnection | null = null;
+	protected output: PassThrough | null = null;
 	protected readonly stderrBuffer: string[] = [];
 	protected processExited = false;
+	protected readonly failureSignal: Promise<void>;
+	private signalFailure!: () => void;
+	protected failureError: Error | null = null;
 	protected readonly diagnosticsStore = new Map<string, Diagnostic[]>();
 
 	constructor(
 		protected readonly root: string,
 		protected readonly server: ResolvedServer,
-	) {}
+	) {
+		this.failureSignal = new Promise<void>((resolve) => {
+			this.signalFailure = resolve;
+		});
+	}
 
 	pid(): number | undefined {
 		return this.proc?.pid;
@@ -48,7 +57,32 @@ export class LspClientTransport {
 			cwd: this.root,
 			env,
 		});
+		const proc = this.proc;
 		this.startStderrReading();
+		proc.stdin.on("error", (error: Error) => {
+			// vscode-jsonrpc's request writer uses an async Promise executor. If
+			// stdin closes, its EPIPE can otherwise become an unhandled rejection.
+			const stderrTail = this.stderrBuffer.slice(-10).join("\n");
+			this.markFailure(
+				new LspConnectionClosedError(
+					this.server.id,
+					this.root,
+					[error.message, stderrTail && `server stderr:\n${stderrTail}`].filter(Boolean).join("\n"),
+				),
+			);
+		});
+		proc.exited.then((code) => {
+			this.processExited = true;
+			this.markFailure(
+				new LspProcessExitedError(
+					this.server.id,
+					this.root,
+					code,
+					this.stderrBuffer.slice(-10).join("\n") || undefined,
+				),
+			);
+			this.connection?.dispose();
+		});
 
 		await new Promise<void>((resolve) => setTimeout(resolve, 100));
 
@@ -57,9 +91,16 @@ export class LspClientTransport {
 			throw new LspProcessExitedError(this.server.id, this.root, this.proc.exitCode, stderr.slice(-2000));
 		}
 
+		// Keep the JSON-RPC writer off the child stdin directly. The stream
+		// wrapper in vscode-jsonrpc has an async-executor bug which turns a
+		// child-process EPIPE into an uncaught rejection. The PassThrough lets
+		// us observe that failure on stdin and report it through the normal LSP
+		// error path instead.
+		this.output = new PassThrough();
+		this.output.pipe(this.proc.stdin);
 		this.connection = createMessageConnection(
 			new StreamMessageReader(this.proc.stdout),
-			new StreamMessageWriter(this.proc.stdin),
+			new StreamMessageWriter(this.output),
 		);
 
 		this.connection.onNotification(
@@ -108,9 +149,18 @@ export class LspClientTransport {
 		}
 		const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
 		return (
+			code === "EPIPE" ||
+			code === "ECONNRESET" ||
 			code === "ERR_STREAM_DESTROYED" ||
-			/connection closed|connection is disposed|stream was destroyed/i.test(error.message)
+			/connection closed|connection is disposed|stream was destroyed|broken pipe/i.test(error.message)
 		);
+	}
+
+	private markFailure(error: Error): void {
+		if (this.failureError) return;
+		this.failureError = error;
+		this.processExited = true;
+		this.signalFailure();
 	}
 
 	protected sendRequest<T>(method: string): Promise<T>;
@@ -138,7 +188,10 @@ export class LspClientTransport {
 
 		try {
 			const requestPromise = (this.connection.sendRequest as <R>(...a: unknown[]) => Promise<R>)<T>(method, ...args);
-			const result = await Promise.race([requestPromise, timeoutPromise]);
+			const failurePromise = this.failureSignal.then(() => {
+				throw this.failureError ?? new LspConnectionClosedError(this.server.id, this.root);
+			});
+			const result = await Promise.race([requestPromise, timeoutPromise, failurePromise]);
 			if (timeoutHandle !== null) clearTimeout(timeoutHandle);
 			return result;
 		} catch (error) {
@@ -189,6 +242,12 @@ export class LspClientTransport {
 				this.connection.dispose();
 			} catch {}
 			this.connection = null;
+		}
+
+		if (this.output) {
+			this.output.unpipe(this.proc?.stdin);
+			this.output.destroy();
+			this.output = null;
 		}
 
 		const proc = this.proc;
