@@ -1,10 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, type Stats, statSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
-import type { LspClient } from "./client.js";
-import { findWorkspaceRoot, formatServerLookupError } from "./client-wrapper.js";
+import { findWorkspaceRoot, formatServerLookupError, withLspClient } from "./client-wrapper.js";
 import { isLspDeadConnectionError, LspInvalidPathError } from "./errors.js";
-import { getLspManager } from "./manager.js";
 import { findServerForExtension } from "./server-resolution.js";
 import type { Diagnostic, ResolvedServer } from "./types.js";
 
@@ -230,50 +228,54 @@ export async function diagnoseSourceFiles(files: SourceFile[], signal?: AbortSig
 
 	const diagnostics: FileDiagnostic[] = [];
 	const fileErrors: FileDiagnosticError[] = [];
-	const manager = getLspManager();
 	for (const group of groups.values()) {
 		const first = group[0];
 		if (!first) continue;
-		let client: LspClient;
+
+		const groupDiagnostics: FileDiagnostic[] = [];
+		const groupErrors: FileDiagnosticError[] = [];
+		const processedFiles = new Set<string>();
 		try {
-			client = await manager.getClient(first.root, first.server, signal);
+			const batch = await withLspClient(
+				first.path,
+				async (client) => {
+					for (const file of group) {
+						if (processedFiles.has(file.path)) continue;
+						try {
+							const result = await client.diagnostics(file.path);
+							groupDiagnostics.push(
+								...result.items.map((diagnostic) => ({
+									filePath: file.path,
+									diagnostic,
+								})),
+							);
+							processedFiles.add(file.path);
+						} catch (error) {
+							if (isLspDeadConnectionError(error)) throw error;
+							groupErrors.push({
+								filePath: file.path,
+								error: error instanceof Error ? error.message : String(error),
+							});
+							processedFiles.add(file.path);
+						}
+					}
+					return { diagnostics: groupDiagnostics, fileErrors: groupErrors };
+				},
+				"diagnostics",
+				signal === undefined ? {} : { signal },
+			);
+			diagnostics.push(...batch.diagnostics);
+			fileErrors.push(...batch.fileErrors);
 		} catch (error) {
 			signal?.throwIfAborted();
+			diagnostics.push(...groupDiagnostics);
+			fileErrors.push(...groupErrors);
 			const message = error instanceof Error ? error.message : String(error);
-			fileErrors.push(...group.map((file) => ({ filePath: file.path, error: message })));
-			continue;
-		}
-		let retried = false;
-		try {
-			for (const file of group) {
-				let completed = false;
-				while (!completed) {
-					try {
-						const result = await client.diagnostics(file.path);
-						diagnostics.push(
-							...result.items.map((diagnostic) => ({
-								filePath: file.path,
-								diagnostic,
-							})),
-						);
-						completed = true;
-					} catch (error) {
-						if (!retried && isLspDeadConnectionError(error)) {
-							manager.invalidateClient(first.root, first.server.id, client);
-							client = await manager.getClient(first.root, first.server, signal);
-							retried = true;
-							continue;
-						}
-						fileErrors.push({
-							filePath: file.path,
-							error: error instanceof Error ? error.message : String(error),
-						});
-						completed = true;
-					}
-				}
-			}
-		} finally {
-			manager.releaseClient(first.root, first.server.id);
+			fileErrors.push(
+				...group
+					.filter((file) => !processedFiles.has(file.path))
+					.map((file) => ({ filePath: file.path, error: message })),
+			);
 		}
 	}
 

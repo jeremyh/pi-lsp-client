@@ -17,7 +17,6 @@ export interface OutlineSymbol {
 	kind: string;
 	startLine: number;
 	endLine: number;
-	containerName?: string;
 	children?: OutlineSymbol[];
 }
 
@@ -79,7 +78,6 @@ function outlineFromSymbolInfo(symbol: SymbolInfo): OutlineSymbol {
 		name: symbol.name,
 		kind: normalizedKind(symbol.kind),
 		...rangeLines(symbol.location.range),
-		...(symbol.containerName ? { containerName: symbol.containerName } : {}),
 	};
 }
 
@@ -103,8 +101,7 @@ function isUnsupportedDocumentSymbolsError(error: unknown): boolean {
 
 function formatSymbol(symbol: OutlineSymbol, indent = 0): string[] {
 	const prefix = "  ".repeat(indent);
-	const name = symbol.containerName ? `${symbol.containerName} > ${symbol.name}` : symbol.name;
-	const lines = [`${prefix}${name}  ${symbol.kind}  ${symbol.startLine}-${symbol.endLine}`];
+	const lines = [`${prefix}${symbol.name}  ${symbol.kind}  ${symbol.startLine}-${symbol.endLine}`];
 	for (const child of symbol.children ?? []) lines.push(...formatSymbol(child, indent + 1));
 	return lines;
 }
