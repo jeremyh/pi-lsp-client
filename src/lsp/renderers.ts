@@ -42,8 +42,9 @@ interface RenameArgs extends PositionArgs {
 }
 
 interface DiagnosticsArgs {
-	filePath: string;
-	severity?: string;
+	paths?: string[];
+	all?: boolean;
+	include_warnings?: boolean;
 }
 
 function locText(loc: Location | LocationLink): string {
@@ -101,9 +102,9 @@ function symbolKindName(kind: number): string {
 
 export function renderDiagnosticsCall(args: DiagnosticsArgs, theme: Theme): Text {
 	const head = theme.fg("toolTitle", theme.bold("lsp_diagnostics "));
-	const file = theme.fg("accent", shorten(args.filePath, PATH_BUDGET));
-	const sev = args.severity ? theme.fg("muted", ` [${args.severity}]`) : "";
-	return new Text(head + file + sev, 0, 0);
+	const target = args.paths?.length ? args.paths.join(", ") : args.all ? "workspace" : "changed files";
+	const warnings = args.include_warnings ? theme.fg("muted", " [warnings]") : "";
+	return new Text(head + theme.fg("accent", shorten(target, PATH_BUDGET)) + warnings, 0, 0);
 }
 
 export function renderDiagnosticsResult(
@@ -115,60 +116,34 @@ export function renderDiagnosticsResult(
 
 	const details = result.details;
 	if (!details) return new Text(theme.fg("muted", result.content[0]?.text ?? ""), 0, 0);
-
-	if (details.error) {
-		const lines: string[] = [
+	if (details.error) return new Text(theme.fg("error", details.error.split("\n")[0] ?? "error"), 0, 0);
+	if (details.totalDiagnostics === 0 && details.fileErrors.length === 0) {
+		return new Text(
 			theme.fg(
-				details.errorKind === "missing_dependency" ? "warning" : "error",
-				details.error.split("\n")[0] ?? "error",
+				"success",
+				`${details.filesChecked} file${details.filesChecked === 1 ? "" : "s"} checked · no diagnostics`,
 			),
-			...details.error
-				.split("\n")
-				.slice(1)
-				.map((l) => theme.fg("dim", `  ${l}`)),
-		];
-		return new Text(lines.join("\n"), 0, 0);
+			0,
+			0,
+		);
 	}
 
-	const total = details.totalDiagnostics;
-	if (total === 0) {
-		return new Text(theme.fg("success", "No diagnostics"), 0, 0);
-	}
-
-	const counts = { error: 0, warning: 0, info: 0, hint: 0 };
-	for (const d of details.diagnostics) {
-		switch (d.diagnostic.severity) {
-			case 1:
-				counts.error++;
-				break;
-			case 2:
-				counts.warning++;
-				break;
-			case 3:
-				counts.info++;
-				break;
-			case 4:
-				counts.hint++;
-				break;
-		}
-	}
-	const badges: string[] = [];
-	if (counts.error > 0) badges.push(theme.fg("error", `E:${counts.error}`));
-	if (counts.warning > 0) badges.push(theme.fg("warning", `W:${counts.warning}`));
-	if (counts.info > 0) badges.push(theme.fg("muted", `I:${counts.info}`));
-	if (counts.hint > 0) badges.push(theme.fg("dim", `H:${counts.hint}`));
-
-	const uniqueDiagnosticFiles = unique(details.diagnostics, (d) => d.file);
-	const fileCount = uniqueDiagnosticFiles.length;
 	const summary =
-		badges.join(" ") +
-		theme.fg("muted", ` • ${fileCount} file${fileCount === 1 ? "" : "s"}`) +
+		theme.fg(
+			details.errorCount > 0 ? "error" : "success",
+			`${details.errorCount} error${details.errorCount === 1 ? "" : "s"}`,
+		) +
+		theme.fg("muted", ` · ${details.filesChecked} file${details.filesChecked === 1 ? "" : "s"} checked`) +
+		(details.suppressedWarnings > 0 ? theme.fg("dim", ` · ${details.suppressedWarnings} warnings suppressed`) : "") +
+		(details.fileErrors.length > 0
+			? theme.fg("warning", ` · ${details.fileErrors.length} files could not be checked`)
+			: "") +
 		(details.truncated ? theme.fg("warning", " (truncated)") : "");
 
+	const uniqueDiagnosticFiles = unique(details.diagnostics, (d) => d.file);
 	if (!options.expanded) {
-		const files = uniqueDiagnosticFiles.slice(0, COLLAPSED_HEAD);
 		const lines: string[] = [summary];
-		for (const f of files) {
+		for (const f of uniqueDiagnosticFiles.slice(0, COLLAPSED_HEAD)) {
 			lines.push(theme.fg("muted", `  ${shorten(f.file, PATH_BUDGET)}`));
 		}
 		if (uniqueDiagnosticFiles.length > COLLAPSED_HEAD) {
@@ -183,24 +158,21 @@ export function renderDiagnosticsResult(
 		arr.push(diagnostic);
 		grouped.set(file, arr);
 	}
-
 	const lines: string[] = [summary, ""];
 	let renderedRows = 0;
 	for (const [file, diagnostics] of grouped) {
 		if (renderedRows >= EXPANDED_HEAD) break;
 		lines.push(theme.fg("accent", shorten(file, PATH_BUDGET)));
-		for (const d of diagnostics) {
+		for (const diagnostic of diagnostics) {
 			if (renderedRows >= EXPANDED_HEAD) break;
-			const sevKey = diagSeverityKey(d.severity);
-			const sev = theme.fg(sevKey, diagSeverityChar(d.severity));
-			const at = theme.fg("muted", `${d.range.start.line + 1}:${d.range.start.character}`);
-			const msg = theme.fg("toolOutput", truncateToWidth(d.message, 160));
-			lines.push(`  ${sev} ${at}  ${msg}`);
+			const severity = theme.fg(diagSeverityKey(diagnostic.severity), diagSeverityChar(diagnostic.severity));
+			const at = theme.fg("muted", `${diagnostic.range.start.line + 1}:${diagnostic.range.start.character}`);
+			lines.push(`  ${severity} ${at}  ${theme.fg("toolOutput", truncateToWidth(diagnostic.message, 160))}`);
 			renderedRows++;
 		}
 	}
-	if (total > EXPANDED_HEAD) {
-		lines.push(theme.fg("dim", `… ${total - EXPANDED_HEAD} more diagnostics not shown`));
+	if (details.diagnostics.length > EXPANDED_HEAD) {
+		lines.push(theme.fg("dim", `… ${details.diagnostics.length - EXPANDED_HEAD} more diagnostics not shown`));
 	}
 	return new Text(lines.join("\n"), 0, 0);
 }

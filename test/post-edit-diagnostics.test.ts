@@ -110,6 +110,20 @@ describe("post-edit diagnostics", () => {
 		expect(result).toEqual({ widgetLines: undefined });
 	});
 
+	it("#given compact diagnostics summary with zero errors #when appending #then treats it as clean", async () => {
+		// given
+		const event = editEvent("src/clean.ts");
+
+		// when
+		const result = await appendPostEditDiagnostics(
+			event,
+			async () => "1 file checked · 0 errors · 3 warnings suppressed",
+		);
+
+		// then
+		expect(result).toEqual({ widgetLines: undefined });
+	});
+
 	it("#given post-edit diagnostics for unsupported extension #when appending #then treats it as clean", async () => {
 		// given
 		const event = editEvent("ccapi-cf-proxy/wrangler.toml");
@@ -245,7 +259,7 @@ describe("post-edit diagnostics", () => {
 		// then
 		expect(diagnostics).toHaveBeenCalledWith(
 			"call-1:post-edit-diagnostics:src/broken.ts",
-			{ filePath: "src/broken.ts", severity: "error" },
+			{ paths: ["src/broken.ts"] },
 			undefined,
 			undefined,
 			ctx,

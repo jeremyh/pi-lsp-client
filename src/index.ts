@@ -28,6 +28,7 @@ import { getAllServers } from "./lsp/server-resolution.js";
 import { type LspDiagnosticsDetails, lsp_diagnostics } from "./lsp/tools/diagnostics.js";
 import { type LspFindReferencesDetails, lsp_find_references } from "./lsp/tools/find-references.js";
 import { type LspGotoDefinitionDetails, lsp_goto_definition } from "./lsp/tools/goto-definition.js";
+import { lsp_outline } from "./lsp/tools/outline.js";
 import {
 	type LspPrepareRenameDetails,
 	type LspRenameDetails,
@@ -65,10 +66,11 @@ export interface PostEditToolResultRegistrar {
  * explicit getSnapshot() API.
  *
  * Tools registered (unless disabledTools is set in lsp-client.json):
- *   - lsp_diagnostics      — errors/warnings/info from language servers
+ *   - lsp_diagnostics      — compact errors for changed or explicit source files
  *   - lsp_goto_definition  — jump to symbol definition
  *   - lsp_find_references  — all usages of a symbol across the workspace
  *   - lsp_symbols          — document outline or workspace symbol search
+ *   - lsp_outline           — compact outline for one source file
  *   - lsp_prepare_rename   — validate rename feasibility
  *   - lsp_rename           — apply a workspace edit (sequential)
  *
@@ -119,6 +121,10 @@ export default function (pi: ExtensionAPI): void {
 			renderResult: (result, options, theme) =>
 				renderSymbolsResult(result as ResultLike<LspSymbolsDetails>, options, theme),
 		});
+	}
+
+	if (isEnabled("lsp_outline")) {
+		pi.registerTool({ ...lsp_outline });
 	}
 
 	if (isEnabled("lsp_prepare_rename")) {
@@ -234,7 +240,7 @@ export async function handlePostEditDiagnosticsToolResult(
 	const result = await appendPostEditDiagnostics(event, async (filePath) => {
 		const result = await lsp_diagnostics.execute(
 			`${event.toolCallId}:post-edit-diagnostics:${filePath}`,
-			{ filePath, severity: "error" },
+			{ paths: [filePath] },
 			undefined,
 			undefined,
 			ctx,

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { lsp_diagnostics } from "../src/lsp/tools/diagnostics.js";
 import { lsp_find_references } from "../src/lsp/tools/find-references.js";
 import { lsp_goto_definition } from "../src/lsp/tools/goto-definition.js";
+import { lsp_outline } from "../src/lsp/tools/outline.js";
 import { lsp_prepare_rename, lsp_rename } from "../src/lsp/tools/rename.js";
 import { lsp_symbols } from "../src/lsp/tools/symbols.js";
 
@@ -15,16 +16,17 @@ describe("lsp_diagnostics tool definition", () => {
 		expect(lsp_diagnostics.description).toContain("language server");
 	});
 
-	it("#given diagnostics parameters #when inspecting schema #then requires filePath only", () => {
+	it("#given diagnostics parameters #when inspecting schema #then exposes only optional scope controls", () => {
 		// given
 		const objectSchema = Type.Object({});
 		const parameters = lsp_diagnostics.parameters;
 
 		// when / then
 		expect(parameters.type).toBe(objectSchema.type);
-		expect(parameters.required).toEqual(["filePath"]);
-		expect(parameters.properties).toHaveProperty("filePath");
-		expect(parameters.properties).toHaveProperty("severity");
+		expect(parameters.required).toBeUndefined();
+		expect(parameters.properties).toHaveProperty("paths");
+		expect(parameters.properties).toHaveProperty("all");
+		expect(parameters.properties).toHaveProperty("include_warnings");
 	});
 });
 
@@ -41,6 +43,15 @@ describe("lsp_find_references tool definition", () => {
 		// given / when / then
 		expect(lsp_find_references.name).toBe("lsp_find_references");
 		expect(lsp_find_references.parameters.required).toEqual(["filePath", "line", "character"]);
+	});
+});
+
+describe("lsp_outline tool definition", () => {
+	it("#given outline tool #when inspecting metadata #then requires one path", () => {
+		// given / when / then
+		expect(lsp_outline.name).toBe("lsp_outline");
+		expect(lsp_outline.parameters.required).toEqual(["path"]);
+		expect(lsp_outline.parameters.properties).toHaveProperty("query");
 	});
 });
 

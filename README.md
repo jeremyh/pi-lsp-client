@@ -11,13 +11,16 @@ The same author re-licensed the ported source under MIT for distribution in the 
 ## Quick Demo
 
 ```text
-> Show me the type errors in src/foo.ts.
+> Diagnose my edits.
 
-[lsp_diagnostics] src/foo.ts
-E:2 W:1 • 1 file
-  E 14:5  Type 'string' is not assignable to type 'number'.
-  E 27:1  Cannot find name 'unknownVar'.
-  W  9:3  'helper' is declared but its value is never read.
+[lsp_diagnostics]
+2 errors in 1 file
+
+src/foo.ts
+  14:5  Type 'string' is not assignable to type 'number'.
+  27:1  Cannot find name 'unknownVar'.
+
+3 warnings suppressed
 ```
 
 ```text
@@ -61,12 +64,13 @@ After installation, restart pi (or run `/reload` inside an interactive session).
 
 ### `lsp_diagnostics`
 
-Errors, warnings, and hints from the language server BEFORE running build. Works for both single files and directories (extension auto-detected).
+Diagnose supported source files before running a build. With no arguments, checks source files changed in git. Use explicit paths for a bounded selection or `all: true` for the supported workspace. Errors are shown by default; warning details require `include_warnings: true`.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `filePath` | `string` (required) | File or directory path. |
-| `severity` | `"error" \| "warning" \| "information" \| "hint" \| "all"` (optional) | Filter by severity. Default `all`. |
+| `paths` | `string[]` (optional) | Files and/or directories. Directories are searched recursively and are independent of git state. |
+| `all` | `boolean` (optional) | Diagnose the supported workspace. |
+| `include_warnings` | `boolean` (optional) | Include warning details. Default `false`. |
 
 ### `lsp_goto_definition`
 
@@ -88,6 +92,15 @@ Find all usages of the symbol at a given position across the entire workspace.
 | `line` | `number` (required) | 1-based line number. |
 | `character` | `number` (required) | 0-based column. |
 | `includeDeclaration` | `boolean` (optional) | Include the declaration itself. Default `true`. |
+
+### `lsp_outline`
+
+Show the structure and full source line ranges of one known source file. Optional `query` is a case-insensitive symbol-name filter.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `string` (required) | Source file. |
+| `query` | `string` (optional) | Symbol-name filter. |
 
 ### `lsp_symbols`
 
@@ -175,7 +188,7 @@ Add custom servers by creating either:
 }
 ```
 
-`disabledTools` is merged from project and user configuration and removes those tools from pi's registry entirely. This is useful when a language server advertises a broken or unhelpful operation. Tool names are `lsp_diagnostics`, `lsp_goto_definition`, `lsp_find_references`, `lsp_symbols`, `lsp_prepare_rename`, and `lsp_rename`. The setting is configuration-wide rather than server-specific because pi's tool registry is global for a session; use a project-local config when the policy should apply only to one repository.
+`disabledTools` is merged from project and user configuration and removes those tools from pi's registry entirely. This is useful when a language server advertises a broken or unhelpful operation. Tool names are `lsp_diagnostics`, `lsp_outline`, `lsp_goto_definition`, `lsp_find_references`, `lsp_symbols`, `lsp_prepare_rename`, and `lsp_rename`. The setting is configuration-wide rather than server-specific because pi's tool registry is global for a session; use a project-local config when the policy should apply only to one repository.
 
 `disabled: true` removes a builtin server from resolution. Project config wins over user config. Builtins are the lowest priority (only used when no project/user override exists).
 
