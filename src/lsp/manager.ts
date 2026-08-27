@@ -30,6 +30,7 @@ export interface LspManagerOptions {
 	reaperIntervalMs?: number;
 	clientFactory?: (root: string, server: ResolvedServer) => LspClient;
 	now?: () => number;
+	ready?: Promise<void> | undefined;
 }
 
 function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
@@ -74,6 +75,8 @@ export class LspManager {
 	private readonly reaperIntervalMs: number;
 	private readonly clientFactory: (root: string, server: ResolvedServer) => LspClient;
 	private readonly now: () => number;
+	private readonly ready: Promise<void> | null;
+	private readonly pendingWarmups = new Set<string>();
 
 	private initTimeoutFor(server: ResolvedServer): number {
 		return server.initializationTimeoutMs ?? this.initTimeoutMs;
@@ -85,6 +88,7 @@ export class LspManager {
 		this.reaperIntervalMs = options.reaperIntervalMs ?? REAPER_INTERVAL_MS;
 		this.clientFactory = options.clientFactory ?? ((root, server) => new LspClient(root, server));
 		this.now = options.now ?? (() => Date.now());
+		this.ready = options.ready ?? null;
 
 		this.startReaper();
 		this.installProcessExitHandler();
@@ -157,6 +161,9 @@ export class LspManager {
 	}
 
 	async getClient(root: string, server: ResolvedServer, signal?: AbortSignal): Promise<LspClient> {
+		if (this.ready) {
+			await awaitWithSignal(this.ready, signal);
+		}
 		if (this.disposed) {
 			throw new Error("LspManager has been disposed");
 		}
@@ -189,6 +196,15 @@ export class LspManager {
 					throw err;
 				}
 				managed.pendingWaiters--;
+			}
+
+			if (this.disposed) {
+				managed.client.stop().catch(() => {});
+				throw new Error("LspManager has been disposed");
+			}
+			if (this.clients.get(key) !== managed) {
+				managed.client.stop().catch(() => {});
+				return this.getClient(root, server, signal);
 			}
 
 			if (signal?.aborted) {
@@ -242,6 +258,15 @@ export class LspManager {
 		newManaged.initializingSince = null;
 		newManaged.initPromise = null;
 
+		if (this.disposed) {
+			client.stop().catch(() => {});
+			throw new Error("LspManager has been disposed");
+		}
+		if (this.clients.get(key) !== newManaged) {
+			client.stop().catch(() => {});
+			return this.getClient(root, server, signal);
+		}
+
 		if (signal?.aborted) {
 			await this.tryDeleteIfOrphaned(key, newManaged);
 			signal.throwIfAborted();
@@ -273,6 +298,24 @@ export class LspManager {
 	warmupClient(root: string, server: ResolvedServer): void {
 		if (this.disposed) return;
 		const key = this.getKey(root, server.id);
+		if (this.ready) {
+			if (this.pendingWarmups.has(key)) return;
+			this.pendingWarmups.add(key);
+			void this.ready
+				.then(
+					() => {
+						this.pendingWarmups.delete(key);
+						this.warmupClient(root, server);
+					},
+					() => {
+						this.pendingWarmups.delete(key);
+					},
+				)
+				.catch(() => {
+					this.pendingWarmups.delete(key);
+				});
+			return;
+		}
 		if (this.clients.has(key)) return;
 
 		const client = this.clientFactory(root, server);
@@ -296,6 +339,10 @@ export class LspManager {
 
 		initPromise.then(
 			() => {
+				if (this.disposed || this.clients.get(key) !== managed) {
+					client.stop().catch(() => {});
+					return;
+				}
 				managed.isInitializing = false;
 				managed.initializingSince = null;
 				managed.initPromise = null;
@@ -364,10 +411,11 @@ export class LspManager {
 }
 
 let _defaultInstance: LspManager | null = null;
+let _defaultDisposal: Promise<void> | null = null;
 
 export function getLspManager(): LspManager {
 	if (!_defaultInstance) {
-		_defaultInstance = new LspManager();
+		_defaultInstance = new LspManager({ ready: _defaultDisposal ?? undefined });
 	}
 	return _defaultInstance;
 }
@@ -376,6 +424,15 @@ export async function disposeDefaultLspManager(): Promise<void> {
 	if (_defaultInstance) {
 		const m = _defaultInstance;
 		_defaultInstance = null;
-		await m.stopAll();
+		const previousDisposal = _defaultDisposal;
+		let disposal: Promise<void>;
+		const currentDisposal = m.stopAll();
+		disposal = Promise.allSettled(previousDisposal ? [previousDisposal, currentDisposal] : [currentDisposal]).then(
+			() => {
+				if (_defaultDisposal === disposal) _defaultDisposal = null;
+			},
+		);
+		_defaultDisposal = disposal;
+		await disposal;
 	}
 }

@@ -23,6 +23,7 @@ export class LspClientTransport {
 	private signalFailure!: () => void;
 	protected failureError: Error | null = null;
 	protected readonly diagnosticsStore = new Map<string, Diagnostic[]>();
+	private stopPromise: Promise<void> | null = null;
 
 	constructor(
 		protected readonly root: string,
@@ -227,28 +228,49 @@ export class LspClientTransport {
 		}
 	}
 
+	/**
+	 * Begin the protocol shutdown without waiting for the server's response.
+	 *
+	 * Shutdown runs from pi's session_shutdown hook, which is awaited by the
+	 * host before it can create the replacement session. A server that is
+	 * indexing may never answer this request, so process termination must not
+	 * depend on the request timeout (which is deliberately configurable for
+	 * normal LSP requests).
+	 */
+	protected sendShutdownRequest(): Promise<void> {
+		if (!this.connection) return Promise.resolve();
+		return (this.connection.sendRequest as (...a: unknown[]) => Promise<unknown>)("shutdown")
+			.then(() => {})
+			.catch(() => {});
+	}
+
 	isAlive(): boolean {
 		return this.proc !== null && !this.processExited && this.proc.exitCode === null;
 	}
 
 	async stop(): Promise<void> {
-		if (this.connection) {
-			try {
-				await this.sendRequest<null>("shutdown");
-			} catch {}
-			try {
-				await this.sendNotification("exit");
-			} catch {}
-			try {
-				this.connection.dispose();
-			} catch {}
-			this.connection = null;
-		}
+		if (this.stopPromise) return this.stopPromise;
+		this.stopPromise = this.stopImpl();
+		return this.stopPromise;
+	}
 
-		if (this.output) {
-			this.output.unpipe(this.proc?.stdin);
-			this.output.destroy();
-			this.output = null;
+	private async stopImpl(): Promise<void> {
+		if (this.connection) {
+			// Start the protocol shutdown, but do not await it. The request is
+			// deliberately sent without the normal request timeout: stop must
+			// own the process lifetime rather than inherit a potentially long
+			// timeout configured for indexing. The process may be terminated
+			// before either protocol message is flushed.
+			let shutdown: Promise<void>;
+			try {
+				shutdown = this.sendShutdownRequest();
+			} catch {
+				shutdown = Promise.resolve();
+			}
+			void shutdown.then(
+				() => this.sendNotification("exit").catch(() => {}),
+				() => {},
+			);
 		}
 
 		const proc = this.proc;
@@ -271,7 +293,15 @@ export class LspClientTransport {
 						}),
 					timeoutPromise,
 				]);
-				if (!exitedBeforeTimeout) {
+				if (exitedBeforeTimeout) {
+					// The leader can exit cleanly while a descendant ignores
+					// SIGTERM. killProcessTree still targets the original
+					// process group, so force the group even after the leader
+					// has closed.
+					try {
+						proc.kill("SIGKILL");
+					} catch {}
+				} else {
 					try {
 						proc.kill("SIGKILL");
 						await Promise.race([
@@ -281,6 +311,24 @@ export class LspClientTransport {
 					} catch {}
 				}
 			} catch {}
+		}
+
+		if (this.connection) {
+			try {
+				this.connection.dispose();
+			} catch {}
+			this.connection = null;
+		}
+
+		if (this.output) {
+			this.output.unpipe(proc?.stdin);
+			// Do not destroy the PassThrough while a vscode-jsonrpc request
+			// write may still be in flight. vscode-jsonrpc 8.x uses an async
+			// Promise executor for sendRequest; a rejected stream write can
+			// otherwise create an unhandled rejection outside the returned
+			// request promise. Unpipe and drop the reference instead so
+			// pending writes can settle safely.
+			this.output = null;
 		}
 
 		this.processExited = true;

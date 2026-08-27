@@ -17,6 +17,7 @@ function setupManager(options?: {
 	initTimeoutMs?: number;
 	reaperIntervalMs?: number;
 	clientFactoryOptions?: () => FakeLspClientOptions;
+	ready?: Promise<void>;
 }): FakeContext {
 	const clients: FakeLspClient[] = [];
 	const now = { value: 1_000 };
@@ -25,6 +26,7 @@ function setupManager(options?: {
 		initTimeoutMs: options?.initTimeoutMs ?? 1_000,
 		reaperIntervalMs: options?.reaperIntervalMs ?? 100,
 		now: () => now.value,
+		ready: options?.ready,
 		clientFactory: (root: string, server: ResolvedServer): LspClient => {
 			const client = new FakeLspClient(root, server, options?.clientFactoryOptions?.());
 			clients.push(client);
@@ -47,6 +49,28 @@ function firstSnapshot(manager: LspManager): ReturnType<LspManager["getSnapshot"
 }
 
 describe("LspManager", () => {
+	it("#given a manager replacement is still disposing #when acquiring a client #then acquisition waits for disposal", async () => {
+		// given
+		let releaseReady!: () => void;
+		const ready = new Promise<void>((resolve) => {
+			releaseReady = resolve;
+		});
+		const { manager, clients } = setupManager({ ready });
+		const server = makeServer("typescript");
+		const acquisition = manager.getClient("/root/a", server);
+
+		await Promise.resolve();
+		expect(clients).toEqual([]);
+
+		// when
+		releaseReady();
+
+		// then
+		const client = await acquisition;
+		expect(client).toBe(clients[0]);
+		await manager.stopAll();
+	});
+
 	it("#given two concurrent getClient calls #when both await #then start and initialize run once", async () => {
 		// given
 		const { manager, clients } = setupManager();
@@ -279,6 +303,28 @@ describe("LspManager", () => {
 		expect(firstClient(clients).stopCallCount).toBeGreaterThan(0);
 
 		await manager.stopAll();
+	});
+
+	it("#given pending init #when manager is stopped #then acquisition does not return a stopped client", async () => {
+		// given
+		const { manager, clients } = setupManager({
+			clientFactoryOptions: () => ({ initDelayMs: 20 }),
+		});
+		const server = makeServer("typescript");
+		const acquisition = manager.getClient("/root/a", server);
+
+		await Promise.resolve();
+		const secondAcquisition = manager.getClient("/root/a", server);
+
+		// when
+		const disposal = manager.stopAll();
+
+		// then
+		await expect(acquisition).rejects.toThrow(/disposed/i);
+		await expect(secondAcquisition).rejects.toThrow(/disposed/i);
+		await disposal;
+		expect(manager.getSnapshot()).toEqual([]);
+		expect(firstClient(clients).stopCallCount).toBeGreaterThan(0);
 	});
 
 	it("#given multiple clients #when stopAll #then all clients stopped and pool cleared", async () => {

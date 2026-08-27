@@ -174,7 +174,11 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("session_shutdown", async (_event, ctx) => {
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 		ctx.ui.setWidget(POST_EDIT_DIAGNOSTICS_WIDGET_KEY, undefined);
-		await disposeDefaultLspManager();
+		// The host awaits session_shutdown before replacing the session. LSP
+		// shutdown is best-effort and process termination is initiated
+		// synchronously by the manager, so do not make /new wait for a busy
+		// language server to exit.
+		void disposeDefaultLspManager().catch(() => {});
 	});
 
 	pi.registerCommand("lsp", {
