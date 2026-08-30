@@ -169,8 +169,6 @@ export default function (pi: ExtensionAPI): void {
 		updateStatus(ctx);
 	});
 
-	registerPostEditDiagnosticsHook(pi);
-
 	pi.on("session_shutdown", async (_event, ctx) => {
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 		ctx.ui.setWidget(POST_EDIT_DIAGNOSTICS_WIDGET_KEY, undefined);

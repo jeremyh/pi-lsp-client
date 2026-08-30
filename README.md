@@ -74,7 +74,7 @@ Diagnose supported source files before running a build. With no arguments, check
 
 ### `lsp_goto_definition`
 
-Jump to the definition of the symbol at a given position.
+Jump to the semantic definition of the symbol at a given position. Prefer this over textual grep when following code relationships.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -84,7 +84,7 @@ Jump to the definition of the symbol at a given position.
 
 ### `lsp_find_references`
 
-Find all usages of the symbol at a given position across the entire workspace.
+Find semantic uses of the symbol at a given position across the entire workspace. Prefer this over grep for symbol-usage questions; use grep for textual or non-code occurrences.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -104,7 +104,7 @@ Show the structure and full source line ranges of one known source file. Optiona
 
 ### `lsp_symbols`
 
-Document outline (`scope: "document"`) or workspace-wide symbol search (`scope: "workspace"`, requires `query`).
+Preferred first tool for locating named classes, functions, methods, types, and other code symbols; prefer it over grep when the query is a code identifier. It provides a document outline (`scope: "document"`) or workspace-wide symbol search (`scope: "workspace"`, requires `query`).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -201,7 +201,7 @@ Add custom servers by creating either:
 - **Request timeout: 15 seconds by default.** Servers can override this with `requestTimeoutMs` when indexing or analysis is expected to take longer.
 - **Abort-aware acquisition.** `getClient(root, server, signal?)` participates in tool cancellation. If the signal aborts before init resolves, the caller is removed from the waiter list; if no callers remain, the initializing client is stopped and removed.
 - **Crash retry.** When the JSON-RPC transport throws `LspConnectionClosedError` or `LspProcessExitedError` mid-call, the wrapper evicts the dead client and retries exactly once for idempotent read tools (`diagnostics`, `goto_definition`, `find_references`, `symbols`, `prepare_rename`). Mutating tools (`rename`) are never retried.
-- **Tool filtering.** `disabledTools` is evaluated when the extension loads. Disabled tools are not exposed to the model, though internal post-edit diagnostics still use `lsp_diagnostics` directly.
+- **Tool filtering.** `disabledTools` is evaluated when the extension loads. Disabled tools are not exposed to the model.
 - **Session shutdown is the primary cleanup boundary.** `pi.on("session_shutdown", ...)` starts `disposeDefaultLspManager()` without awaiting language-server shutdown (stops are idempotent, send best-effort protocol messages that may not flush before immediate process termination, and terminate the process immediately), clears the reaper interval, unregisters the process exit fallback, and clears `pi-lsp` status/widget keys. This keeps `/new` responsive while a server is indexing.
 - **No raw signal handlers.** No `SIGINT`/`SIGTERM` listeners — those would fight pi's TUI shutdown. Just `process.once("exit", ...)` as a sync fallback for unexpected exits, and the disposer is called from `session_shutdown` so the listener count never grows across `/reload`.
 
