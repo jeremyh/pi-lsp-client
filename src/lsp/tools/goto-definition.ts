@@ -24,7 +24,9 @@ export interface LspGotoDefinitionDetails {
 export const lsp_goto_definition = defineTool({
 	name: "lsp_goto_definition",
 	label: "LSP Goto Definition",
-	description: "Jump to symbol definition. Find WHERE something is defined.",
+	description:
+		"Find the semantic definition of an identifier at a given position. " +
+		"Prefer over textual grep when following code relationships.",
 	parameters: Params,
 	async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
 		try {

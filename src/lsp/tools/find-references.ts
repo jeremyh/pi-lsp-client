@@ -28,7 +28,9 @@ export interface LspFindReferencesDetails {
 export const lsp_find_references = defineTool({
 	name: "lsp_find_references",
 	label: "LSP Find References",
-	description: "Find ALL usages/references of a symbol across the entire workspace.",
+	description:
+		"Find semantic uses of an identifier at a given position across the entire workspace. " +
+		'Prefer over grep for "where is this symbol used?" questions; use grep for textual/non-code occurrences.',
 	parameters: Params,
 	async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
 		try {

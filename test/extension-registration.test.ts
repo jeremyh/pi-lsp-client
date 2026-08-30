@@ -35,6 +35,8 @@ describe("lsp_goto_definition tool definition", () => {
 		// given / when / then
 		expect(lsp_goto_definition.name).toBe("lsp_goto_definition");
 		expect(lsp_goto_definition.parameters.required).toEqual(["filePath", "line", "character"]);
+
+		expect(lsp_goto_definition.description).toContain("Prefer over textual grep");
 	});
 });
 
@@ -43,6 +45,8 @@ describe("lsp_find_references tool definition", () => {
 		// given / when / then
 		expect(lsp_find_references.name).toBe("lsp_find_references");
 		expect(lsp_find_references.parameters.required).toEqual(["filePath", "line", "character"]);
+
+		expect(lsp_find_references.description).toContain("Prefer over grep");
 	});
 });
 
@@ -61,6 +65,8 @@ describe("lsp_symbols tool definition", () => {
 		expect(lsp_symbols.name).toBe("lsp_symbols");
 		expect(lsp_symbols.parameters.required).toContain("filePath");
 		expect(lsp_symbols.parameters.required).toContain("scope");
+
+		expect(lsp_symbols.description).toContain("Preferred first tool");
 	});
 });
 

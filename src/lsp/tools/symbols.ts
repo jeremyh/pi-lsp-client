@@ -36,6 +36,8 @@ export const lsp_symbols = defineTool({
 	name: "lsp_symbols",
 	label: "LSP Symbols",
 	description:
+		"Preferred first tool for locating named classes, functions, methods, types, and other code symbols. " +
+		"Prefer this over grep when the query is a code identifier. " +
 		"Get symbols from a file (document) or search across the workspace. " +
 		"Use scope='document' for a file outline, scope='workspace' for project-wide symbol search.",
 	parameters: Params,
